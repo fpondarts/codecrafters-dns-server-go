@@ -22,19 +22,19 @@ func (r *DNSResponse) Serialize() []byte {
 }
 
 type DNSHeader struct {
-	ID      int16
-	QR      int8
-	OPCODE  int8
-	AA      int8
-	TC      int8
-	RD      int8
-	RA      int8
-	Z       int8
-	RCODE   int8
-	QDCOUNT int16
-	ANCOUNT int16
-	NSCOUNT int16
-	ARCOUNT int16
+	ID      uint16
+	QR      uint8
+	OPCODE  uint8
+	AA      uint8
+	TC      uint8
+	RD      uint8
+	RA      uint8
+	Z       uint8
+	RCODE   uint8
+	QDCOUNT uint16
+	ANCOUNT uint16
+	NSCOUNT uint16
+	ARCOUNT uint16
 }
 
 // Serialize encodes the DNS header into exactly 12 bytes, ready to be sent over the network.
@@ -159,6 +159,35 @@ var TestResponse = DNSResponse{
 	},
 }
 
+func ParseDNSHeader(buf []byte) DNSHeader {
+	id := binary.BigEndian.Uint16(buf[:2])
+
+	// [qr, op, op, op, op, aa, tc, rd]
+	opCode := uint8((buf[2] >> 3) & 0x0f)
+	rd := uint8(buf[2] & 0x01)
+
+	rCode := uint8(0)
+
+	if opCode != 0 {
+		rCode = 4
+	}
+	return DNSHeader{
+		ID:      id,
+		QR:      0,
+		OPCODE:  opCode,
+		AA:      0,
+		TC:      0,
+		RD:      rd,
+		RA:      0,
+		Z:       0,
+		RCODE:   rCode,
+		QDCOUNT: 0,
+		ANCOUNT: 0,
+		NSCOUNT: 0,
+		ARCOUNT: 0,
+	}
+}
+
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
@@ -186,7 +215,12 @@ func main() {
 		}
 
 		receivedData := string(buf[:size])
+		receivedHeader := ParseDNSHeader(buf[:size])
 		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
+		TestResponse.Header.ID = receivedHeader.ID
+		TestResponse.Header.OPCODE = receivedHeader.OPCODE
+		TestResponse.Header.RD = receivedHeader.RD
+		TestResponse.Header.RCODE = receivedHeader.RCODE
 
 		// Create an empty response
 		_, err = udpConn.WriteToUDP(TestResponse.Serialize(), source)
