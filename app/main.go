@@ -1,9 +1,25 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 )
+
+type DNSResponse struct {
+	Header   DNSHeader
+	Question DNSQuestion
+	Answer   DNSAnswer
+}
+
+func (r *DNSResponse) Serialize() []byte {
+	buf := []byte{}
+
+	buf = append(buf, r.Header.Serialize()...)
+	buf = append(buf, r.Question.Serialize()...)
+	buf = append(buf, r.Answer.Serialize()...)
+	return buf
+}
 
 type DNSHeader struct {
 	ID      int16
@@ -23,8 +39,8 @@ type DNSHeader struct {
 
 // Serialize encodes the DNS header into exactly 12 bytes, ready to be sent over the network.
 // DNS requires fields to be packed tightly in big-endian order (most significant byte first).
-func (h *DNSHeader) Serialize() [12]byte {
-	var buf [12]byte
+func (h *DNSHeader) Serialize() []byte {
+	buf := make([]byte, 12)
 
 	// Bytes 0-1: message ID — split the 16-bit value into two bytes, high byte first.
 	buf[0] = byte(h.ID >> 8)
@@ -59,11 +75,11 @@ func (h *DNSHeader) Serialize() [12]byte {
 	return buf
 }
 
-type DNSNameLabel struct {
+type DNSLabelSequence struct {
 	Label string
 }
 
-func (l *DNSNameLabel) Serialize() []byte {
+func (l *DNSLabelSequence) Serialize() []byte {
 	buf := make([]byte, 0, len(l.Label)+1)
 
 	buf = append(buf, byte(len(l.Label)))
@@ -72,7 +88,7 @@ func (l *DNSNameLabel) Serialize() []byte {
 }
 
 type DNSQuestion struct {
-	Name  []DNSNameLabel
+	Name  []DNSLabelSequence
 	Type  int16
 	Class int16
 }
@@ -90,15 +106,55 @@ func (q *DNSQuestion) Serialize() []byte {
 	return buf
 }
 
-var testHeader = DNSHeader{
-	ID: 1234,
-	QR: 1,
+type DNSAnswer struct {
+	Records []ResourceRecord
 }
 
-var testQuestion = DNSQuestion{
-	Name:  []DNSNameLabel{{Label: "codecrafters"}, {Label: "io"}},
-	Type:  1,
-	Class: 1,
+func (a *DNSAnswer) Serialize() []byte {
+	buf := []byte{}
+	for _, r := range a.Records {
+		buf = append(buf, r.Serialize()...)
+	}
+	return buf
+}
+
+type ResourceRecord struct {
+	Name  []DNSLabelSequence
+	Type  int16
+	Class int16
+	TTL   int32
+	Data  []byte
+}
+
+func (r *ResourceRecord) Serialize() []byte {
+	buf := []byte{}
+	for _, label := range r.Name {
+		buf = append(buf, label.Serialize()...)
+	}
+
+	buf = binary.BigEndian.AppendUint16(buf, uint16(r.Type))
+	buf = binary.BigEndian.AppendUint16(buf, uint16(r.Class))
+	buf = binary.BigEndian.AppendUint32(buf, uint32(r.TTL))
+	buf = binary.BigEndian.AppendUint16(buf, uint16(len(r.Data)))
+	buf = append(buf, r.Data...)
+	return buf
+}
+
+var TestResponse = DNSResponse{
+	Header: DNSHeader{
+		ID: 1234,
+		QR: 1,
+	},
+	Question: DNSQuestion{
+		Name:  []DNSLabelSequence{{Label: "codecrafters"}, {Label: "io"}},
+		Type:  1,
+		Class: 1,
+	},
+	Answer: DNSAnswer{
+		Records: []ResourceRecord{
+			{Name: []DNSLabelSequence{{Label: "codecrafters"}, {Label: "io"}}, Type: 1, Class: 1, TTL: 60, Data: []byte{0x08, 0x08, 0x08, 0x08}},
+		},
+	},
 }
 
 func main() {
@@ -131,14 +187,11 @@ func main() {
 		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
 
 		// Create an empty response
-		header := testHeader.Serialize()
-		response := header[:]
-		response = append(response, testQuestion.Serialize()...)
-		_, err = udpConn.WriteToUDP(response, source)
+		_, err = udpConn.WriteToUDP(TestResponse.Serialize(), source)
 		if err != nil {
 			fmt.Println("Failed to send response:", err)
 		}
-
-		testHeader.QDCOUNT += 1
+		TestResponse.Header.QDCOUNT += 1
+		TestResponse.Header.ANCOUNT += 1
 	}
 }
