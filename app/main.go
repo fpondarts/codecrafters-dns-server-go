@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"net"
+
+	"google.golang.org/genproto/googleapis/api/label"
 )
 
 type DNSHeader struct {
@@ -59,9 +61,46 @@ func (h *DNSHeader) Serialize() [12]byte {
 	return buf
 }
 
+type DNSNameLabel struct {
+	Label string
+}
+
+func (l *DNSNameLabel) Serialize() []byte {
+	buf := make([]byte, 0, len(l.Label)+1)
+
+	buf = append(buf, byte(len(l.Label)))
+	buf = append(buf, l.Label...)
+	return buf
+}
+
+type DNSQuestion struct {
+	Name  []DNSNameLabel
+	Type  int16
+	Class int16
+}
+
+func (q *DNSQuestion) Serialize() []byte {
+	buf := []byte{}
+	for _, label := range q.Name {
+		buf = append(buf, label.Serialize()...)
+	}
+	buf = append(buf, 0x00)
+	buf = append(buf, byte(q.Type>>8))
+	buf = append(buf, byte(q.Type))
+	buf = append(buf, byte(q.Class>>8))
+	buf = append(buf, byte(q.Class))
+	return buf
+}
+
 var testHeader = DNSHeader{
 	ID: 1234,
 	QR: 1,
+}
+
+var testQuestion = DNSQuestion{
+	Name:  []DNSNameLabel{DNSNameLabel{Label: "ccodecrafters"}, DNSNameLabel{Label: "io"}},
+	Type:  1,
+	Class: 1,
 }
 
 func main() {
@@ -94,10 +133,14 @@ func main() {
 		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
 
 		// Create an empty response
-		response := testHeader.Serialize()
-		_, err = udpConn.WriteToUDP(response[:], source)
+		header := testHeader.Serialize()
+		response := header[:]
+		response = append(response, testQuestion.Serialize()...)
+		_, err = udpConn.WriteToUDP(response, source)
 		if err != nil {
 			fmt.Println("Failed to send response:", err)
 		}
+
+		testHeader.QDCOUNT += 1
 	}
 }
