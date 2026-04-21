@@ -89,8 +89,8 @@ func (l *DNSLabelSequence) Serialize() []byte {
 
 type DNSQuestion struct {
 	Name  []DNSLabelSequence
-	Type  int16
-	Class int16
+	Type  uint16
+	Class uint16
 }
 
 func (q *DNSQuestion) Serialize() []byte {
@@ -146,24 +146,61 @@ func ParseDNSHeader(buf []byte) DNSHeader {
 	id := binary.BigEndian.Uint16(buf[:2])
 
 	// [qr, op, op, op, op, aa, tc, rd]
+	qr := uint8((buf[2] >> 7) & 0x01)
 	opCode := uint8((buf[2] >> 3) & 0x0f)
+	aa := uint8((buf[2] >> 2) & 0x01)
+	tc := uint8((buf[2] >> 2) & 0x01)
 	rd := uint8(buf[2] & 0x01)
-
+	ra := uint8((buf[3] >> 7) & 0x01)
+	z := uint8((buf[3] >> 4) & 0x07)
+	rCode := uint8((buf[3]) & 0x0f)
+	qdCount := binary.BigEndian.Uint16(buf[4:6])
+	anCount := binary.BigEndian.Uint16(buf[6:8])
+	nsCount := binary.BigEndian.Uint16(buf[8:10])
+	arCount := binary.BigEndian.Uint16(buf[10:12])
 	return DNSHeader{
 		ID:      id,
-		QR:      0,
+		QR:      qr,
 		OPCODE:  opCode,
-		AA:      0,
-		TC:      0,
+		AA:      aa,
+		TC:      tc,
 		RD:      rd,
-		RA:      0,
-		Z:       0,
-		RCODE:   0,
-		QDCOUNT: 0,
-		ANCOUNT: 0,
-		NSCOUNT: 0,
-		ARCOUNT: 0,
+		RA:      ra,
+		Z:       z,
+		RCODE:   rCode,
+		QDCOUNT: qdCount,
+		ANCOUNT: anCount,
+		NSCOUNT: nsCount,
+		ARCOUNT: arCount,
 	}
+}
+
+func ParseDNSQuestion(buf []byte) DNSQuestion {
+	var i uint = 0
+	Name := []DNSLabelSequence{}
+	for buf[i] != 0x00 {
+		nameLen := uint(buf[i])
+		i += 1
+		Name = append(Name, DNSLabelSequence{Label: string(buf[i : i+nameLen])})
+		i += nameLen
+	}
+
+	Type := binary.BigEndian.Uint16(buf[i : i+2])
+	i += 2
+	Class := binary.BigEndian.Uint16(buf[i : i+2])
+
+	return DNSQuestion{
+		Name,
+		Type,
+		Class,
+	}
+}
+
+func ParseDNSRequest(buf []byte) (DNSHeader, DNSQuestion) {
+	header := ParseDNSHeader(buf[:12])
+	question := ParseDNSQuestion(buf[12:])
+
+	return header, question
 }
 
 func main() {
@@ -193,8 +230,7 @@ func main() {
 		}
 
 		receivedData := string(buf[:size])
-		receivedHeader := ParseDNSHeader(buf[:size])
-
+		receivedHeader, receivedQuestion := ParseDNSRequest([]byte(receivedData))
 		responseRcode := uint8(0)
 		if receivedHeader.OPCODE != 0 {
 			responseRcode = 4
@@ -216,13 +252,19 @@ func main() {
 				ARCOUNT: 0,
 			},
 			Question: DNSQuestion{
-				Name:  []DNSLabelSequence{{Label: "codecrafters"}, {Label: "io"}},
+				Name:  receivedQuestion.Name,
 				Type:  1,
 				Class: 1,
 			},
 			Answer: DNSAnswer{
 				Records: []ResourceRecord{
-					{Name: []DNSLabelSequence{{Label: "codecrafters"}, {Label: "io"}}, Type: 1, Class: 1, TTL: 60, Data: []byte{0x08, 0x08, 0x08, 0x08}},
+					{
+						Name:  receivedQuestion.Name,
+						Type:  1,
+						Class: 1,
+						TTL:   60,
+						Data:  []byte{0x08, 0x08, 0x08, 0x08},
+					},
 				},
 			},
 		}
