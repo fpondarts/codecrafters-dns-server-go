@@ -142,23 +142,6 @@ func (r *ResourceRecord) Serialize() []byte {
 	return buf
 }
 
-var TestResponse = DNSResponse{
-	Header: DNSHeader{
-		ID: 1234,
-		QR: 1,
-	},
-	Question: DNSQuestion{
-		Name:  []DNSLabelSequence{{Label: "codecrafters"}, {Label: "io"}},
-		Type:  1,
-		Class: 1,
-	},
-	Answer: DNSAnswer{
-		Records: []ResourceRecord{
-			{Name: []DNSLabelSequence{{Label: "codecrafters"}, {Label: "io"}}, Type: 1, Class: 1, TTL: 60, Data: []byte{0x08, 0x08, 0x08, 0x08}},
-		},
-	},
-}
-
 func ParseDNSHeader(buf []byte) DNSHeader {
 	id := binary.BigEndian.Uint16(buf[:2])
 
@@ -166,11 +149,6 @@ func ParseDNSHeader(buf []byte) DNSHeader {
 	opCode := uint8((buf[2] >> 3) & 0x0f)
 	rd := uint8(buf[2] & 0x01)
 
-	rCode := uint8(0)
-
-	if opCode != 0 {
-		rCode = 4
-	}
 	return DNSHeader{
 		ID:      id,
 		QR:      0,
@@ -180,7 +158,7 @@ func ParseDNSHeader(buf []byte) DNSHeader {
 		RD:      rd,
 		RA:      0,
 		Z:       0,
-		RCODE:   rCode,
+		RCODE:   0,
 		QDCOUNT: 0,
 		ANCOUNT: 0,
 		NSCOUNT: 0,
@@ -216,18 +194,44 @@ func main() {
 
 		receivedData := string(buf[:size])
 		receivedHeader := ParseDNSHeader(buf[:size])
+
+		responseRcode := uint8(0)
+		if receivedHeader.OPCODE != 0 {
+			responseRcode = 4
+		}
+		testResponse := DNSResponse{
+			Header: DNSHeader{
+				ID:      receivedHeader.ID,
+				QR:      1,
+				OPCODE:  receivedHeader.OPCODE,
+				AA:      0,
+				TC:      0,
+				RD:      receivedHeader.RD,
+				RA:      0,
+				Z:       0,
+				RCODE:   responseRcode,
+				QDCOUNT: 0,
+				ANCOUNT: 0,
+				NSCOUNT: 0,
+				ARCOUNT: 0,
+			},
+			Question: DNSQuestion{
+				Name:  []DNSLabelSequence{{Label: "codecrafters"}, {Label: "io"}},
+				Type:  1,
+				Class: 1,
+			},
+			Answer: DNSAnswer{
+				Records: []ResourceRecord{
+					{Name: []DNSLabelSequence{{Label: "codecrafters"}, {Label: "io"}}, Type: 1, Class: 1, TTL: 60, Data: []byte{0x08, 0x08, 0x08, 0x08}},
+				},
+			},
+		}
 		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
-		TestResponse.Header.ID = receivedHeader.ID
-		TestResponse.Header.OPCODE = receivedHeader.OPCODE
-		TestResponse.Header.RD = receivedHeader.RD
-		TestResponse.Header.RCODE = receivedHeader.RCODE
 
 		// Create an empty response
-		_, err = udpConn.WriteToUDP(TestResponse.Serialize(), source)
+		_, err = udpConn.WriteToUDP(testResponse.Serialize(), source)
 		if err != nil {
 			fmt.Println("Failed to send response:", err)
 		}
-		TestResponse.Header.QDCOUNT += 1
-		TestResponse.Header.ANCOUNT += 1
 	}
 }
