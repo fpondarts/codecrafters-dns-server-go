@@ -96,7 +96,7 @@ var testHeader = DNSHeader{
 }
 
 var testQuestion = DNSQuestion{
-	Name:  []DNSNameLabel{DNSNameLabel{Label: "ccodecrafters"}, DNSNameLabel{Label: "io"}},
+	Name:  []DNSNameLabel{{Label: "codecrafters"}, {Label: "io"}},
 	Type:  1,
 	Class: 1,
 }
