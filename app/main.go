@@ -132,6 +132,8 @@ func (r *ResourceRecord) Serialize() []byte {
 		buf = append(buf, label.Serialize()...)
 	}
 
+	buf = append(buf, 0x00)
+
 	buf = binary.BigEndian.AppendUint16(buf, uint16(r.Type))
 	buf = binary.BigEndian.AppendUint16(buf, uint16(r.Class))
 	buf = binary.BigEndian.AppendUint32(buf, uint32(r.TTL))
