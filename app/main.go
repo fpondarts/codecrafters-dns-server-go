@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"net"
-
-	"google.golang.org/genproto/googleapis/api/label"
 )
 
 type DNSHeader struct {
