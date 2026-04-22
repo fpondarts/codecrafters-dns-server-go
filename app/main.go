@@ -176,13 +176,24 @@ func ParseDNSHeader(buf []byte) DNSHeader {
 }
 
 func ParseDNSQuestion(buf []byte) DNSQuestion {
-	var i uint = 0
+	// Header is 12 bytes fixed
+	var i uint = 12
+
 	Name := []DNSLabelSequence{}
 	for buf[i] != 0x00 {
-		nameLen := uint(buf[i])
-		i += 1
-		Name = append(Name, DNSLabelSequence{Label: string(buf[i : i+nameLen])})
-		i += nameLen
+		lenByte := buf[i]
+
+		if lenByte>>6 == 0x03 {
+			labelOffset := binary.BigEndian.Uint16([]byte{(buf[i] << 2) >> 2, buf[i+1]})
+			nameLen := uint8(buf[labelOffset])
+			Name = append(Name, DNSLabelSequence{Label: string(buf[labelOffset+1 : labelOffset+1+uint16(nameLen)])})
+			i += 2
+		} else {
+			nameLen := uint(lenByte)
+			i += 1
+			Name = append(Name, DNSLabelSequence{Label: string(buf[i : i+nameLen])})
+			i += nameLen
+		}
 	}
 
 	Type := binary.BigEndian.Uint16(buf[i : i+2])
@@ -197,8 +208,8 @@ func ParseDNSQuestion(buf []byte) DNSQuestion {
 }
 
 func ParseDNSRequest(buf []byte) (DNSHeader, DNSQuestion) {
-	header := ParseDNSHeader(buf[:12])
-	question := ParseDNSQuestion(buf[12:])
+	header := ParseDNSHeader(buf)
+	question := ParseDNSQuestion(buf)
 
 	return header, question
 }
