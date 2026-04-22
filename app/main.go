@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"net"
 )
@@ -181,14 +180,11 @@ func ParseDNSHeader(buf []byte) DNSHeader {
 func ParseDNSQuestions(buf []byte) []DNSQuestion {
 	questions := []DNSQuestion{}
 	// Header is 12 bytes fixed
-	for i := 12; i < len(buf); {
+	for i := 12; i < len(buf) && buf[i] != 0x00; {
 		Name := []DNSLabelSequence{}
 		for buf[i] != 0x00 {
 			lenByte := buf[i]
-			fmt.Printf("i: %d, LenByte %b, Len: %d, bufLen: %d\n", i, lenByte, uint8(lenByte), len(buf))
-
 			if lenByte>>6 == 0x03 {
-				fmt.Println("Here")
 				labelOffset := binary.BigEndian.Uint16([]byte{buf[i] & 0x3f, buf[i+1]})
 				nameLen := uint8(buf[labelOffset])
 				Name = append(Name, DNSLabelSequence{Label: string(buf[labelOffset+1 : labelOffset+1+uint16(nameLen)])})
@@ -251,7 +247,6 @@ func main() {
 		}
 
 		receivedData := string(buf[:size])
-		fmt.Printf("Received: %s\n", hex.EncodeToString(buf[:size]))
 		receivedHeader, receivedQuestions := ParseDNSRequest([]byte(receivedData))
 		responseRcode := uint8(0)
 		if receivedHeader.OPCODE != 0 {
