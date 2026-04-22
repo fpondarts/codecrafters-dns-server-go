@@ -324,7 +324,7 @@ func main() {
 			Answers:   answers,
 		}
 		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
-
+		fmt.Printf("Response: %v", testResponse)
 		// Create an empty response
 		_, err = udpConn.WriteToUDP(testResponse.Serialize(), source)
 		if err != nil {
