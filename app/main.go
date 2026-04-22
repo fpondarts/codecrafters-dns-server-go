@@ -4,24 +4,19 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"os"
 )
 
-type DNSResponse struct {
-	Header    DNSHeader
-	Questions []DNSQuestion
-	Answers   []DNSAnswer
+// --- Types and serialization ---
+
+type DNSLabelSequence struct {
+	Label string
 }
 
-func (r *DNSResponse) Serialize() []byte {
-	buf := []byte{}
-
-	buf = append(buf, r.Header.Serialize()...)
-	for _, question := range r.Questions {
-		buf = append(buf, question.Serialize()...)
-	}
-	for _, answer := range r.Answers {
-		buf = append(buf, answer.Serialize()...)
-	}
+func (l *DNSLabelSequence) Serialize() []byte {
+	buf := make([]byte, 0, len(l.Label)+1)
+	buf = append(buf, byte(len(l.Label)))
+	buf = append(buf, l.Label...)
 	return buf
 }
 
@@ -79,18 +74,6 @@ func (h *DNSHeader) Serialize() []byte {
 	return buf
 }
 
-type DNSLabelSequence struct {
-	Label string
-}
-
-func (l *DNSLabelSequence) Serialize() []byte {
-	buf := make([]byte, 0, len(l.Label)+1)
-
-	buf = append(buf, byte(len(l.Label)))
-	buf = append(buf, l.Label...)
-	return buf
-}
-
 type DNSQuestion struct {
 	Name  []DNSLabelSequence
 	Type  uint16
@@ -110,18 +93,6 @@ func (q *DNSQuestion) Serialize() []byte {
 	return buf
 }
 
-type DNSAnswer struct {
-	Records []ResourceRecord
-}
-
-func (a *DNSAnswer) Serialize() []byte {
-	buf := []byte{}
-	for _, r := range a.Records {
-		buf = append(buf, r.Serialize()...)
-	}
-	return buf
-}
-
 type ResourceRecord struct {
 	Name  []DNSLabelSequence
 	Type  uint16
@@ -135,9 +106,7 @@ func (r *ResourceRecord) Serialize() []byte {
 	for _, label := range r.Name {
 		buf = append(buf, label.Serialize()...)
 	}
-
 	buf = append(buf, 0x00)
-
 	buf = binary.BigEndian.AppendUint16(buf, uint16(r.Type))
 	buf = binary.BigEndian.AppendUint16(buf, uint16(r.Class))
 	buf = binary.BigEndian.AppendUint32(buf, uint32(r.TTL))
@@ -145,6 +114,38 @@ func (r *ResourceRecord) Serialize() []byte {
 	buf = append(buf, r.Data...)
 	return buf
 }
+
+type DNSAnswer struct {
+	Records []ResourceRecord
+}
+
+func (a *DNSAnswer) Serialize() []byte {
+	buf := []byte{}
+	for _, r := range a.Records {
+		buf = append(buf, r.Serialize()...)
+	}
+	return buf
+}
+
+type DNSRequest struct {
+	Header    DNSHeader
+	Questions []DNSQuestion
+	Answers   []DNSAnswer
+}
+
+func (r *DNSRequest) Serialize() []byte {
+	buf := []byte{}
+	buf = append(buf, r.Header.Serialize()...)
+	for _, question := range r.Questions {
+		buf = append(buf, question.Serialize()...)
+	}
+	for _, answer := range r.Answers {
+		buf = append(buf, answer.Serialize()...)
+	}
+	return buf
+}
+
+// --- Parsing ---
 
 func ParseDNSHeader(buf []byte) DNSHeader {
 	id := binary.BigEndian.Uint16(buf[:2])
@@ -162,6 +163,7 @@ func ParseDNSHeader(buf []byte) DNSHeader {
 	anCount := binary.BigEndian.Uint16(buf[6:8])
 	nsCount := binary.BigEndian.Uint16(buf[8:10])
 	arCount := binary.BigEndian.Uint16(buf[10:12])
+
 	return DNSHeader{
 		ID:      id,
 		QR:      qr,
@@ -224,13 +226,7 @@ func ParseDNSQuestions(buf []byte) []DNSQuestion {
 		Class := binary.BigEndian.Uint16(buf[i : i+2])
 		i += 2
 
-		question := DNSQuestion{
-			Name,
-			Type,
-			Class,
-		}
-
-		questions = append(questions, question)
+		questions = append(questions, DNSQuestion{Name, Type, Class})
 	}
 
 	return questions
@@ -239,21 +235,116 @@ func ParseDNSQuestions(buf []byte) []DNSQuestion {
 func ParseDNSRequest(buf []byte) (DNSHeader, []DNSQuestion) {
 	header := ParseDNSHeader(buf)
 	questions := ParseDNSQuestions(buf)
-
 	return header, questions
 }
+
+// --- Forwarding ---
+
+func forwardRequest(req DNSRequest, resolver *net.UDPAddr) ([]byte, error) {
+	conn, err := net.DialUDP("udp", nil, resolver)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	_, err = conn.Write(req.Serialize())
+	if err != nil {
+		return nil, err
+	}
+
+	buf := make([]byte, 512)
+	n, err := conn.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	return buf[:n], nil
+}
+
+func ParseAnswers(buf []byte) []ResourceRecord {
+	header := ParseDNSHeader(buf)
+
+	// skip past the question section to reach the answer section
+	i := 12
+	for q := 0; q < int(header.QDCOUNT); q++ {
+		_, end := GetNames(buf, i)
+		i = end + 4 // skip type (2) + class (2)
+	}
+
+	records := []ResourceRecord{}
+	for a := 0; a < int(header.ANCOUNT); a++ {
+		names, end := GetNames(buf, i)
+		i = end
+		labels := make([]DNSLabelSequence, len(names))
+		for j, n := range names {
+			labels[j] = DNSLabelSequence{Label: n}
+		}
+		rtype := binary.BigEndian.Uint16(buf[i : i+2])
+		i += 2
+		class := binary.BigEndian.Uint16(buf[i : i+2])
+		i += 2
+		ttl := int32(binary.BigEndian.Uint32(buf[i : i+4]))
+		i += 4
+		rdlength := int(binary.BigEndian.Uint16(buf[i : i+2]))
+		i += 2
+		records = append(records, ResourceRecord{
+			Name:  labels,
+			Type:  rtype,
+			Class: class,
+			TTL:   ttl,
+			Data:  buf[i : i+rdlength],
+		})
+		i += rdlength
+	}
+	return records
+}
+
+// --- Helpers ---
 
 func NewResourceRecord(q DNSQuestion) ResourceRecord {
 	return ResourceRecord{
 		Name:  q.Name,
 		Type:  q.Type,
 		Class: q.Class,
+		TTL:   60,
+		Data:  []byte{0x08, 0x08, 0x08, 0x08},
 	}
 }
 
+func NewDNSRequest(h DNSHeader, qs []DNSQuestion, as []DNSAnswer) DNSRequest {
+	r := DNSRequest{
+		Header:    h,
+		Questions: qs,
+		Answers:   as,
+	}
+
+	r.Header.QDCOUNT = uint16(len(qs))
+	r.Header.ANCOUNT = uint16(len(as))
+	return r
+}
+
+// --- Entry point ---
+func parseArgs() (resolverAddr *net.UDPAddr) {
+	args := os.Args[1:]
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == "--resolver" {
+			addr, err := net.ResolveUDPAddr("udp", args[i+1])
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Invalid resolver address %q: %v\n", args[i+1], err)
+				os.Exit(1)
+			}
+			return addr
+		}
+	}
+	return nil
+}
+
 func main() {
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
+
+	resolverAddr := parseArgs()
+	if resolverAddr != nil {
+		fmt.Printf("Forwarding queries to resolver: %s\n", resolverAddr)
+	}
 
 	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:2053")
 	if err != nil {
@@ -286,43 +377,46 @@ func main() {
 
 		answers := []DNSAnswer{}
 
+		requestsToForward := []DNSRequest{}
 		for _, question := range receivedQuestions {
-			record := ResourceRecord{
-				Name:  question.Name,
-				Type:  question.Type,
-				Class: question.Class,
-				TTL:   60,
-				Data:  []byte{0x08, 0x08, 0x08, 0x08},
-			}
-			answer := DNSAnswer{
-				Records: []ResourceRecord{record},
-			}
-			answers = append(answers, answer)
+			requestsToForward = append(requestsToForward, NewDNSRequest(receivedHeader, []DNSQuestion{question}, []DNSAnswer{}))
 		}
 
-		testResponse := DNSResponse{
-			Header: DNSHeader{
-				ID:      receivedHeader.ID,
-				QR:      1,
-				OPCODE:  receivedHeader.OPCODE,
-				AA:      0,
-				TC:      0,
-				RD:      receivedHeader.RD,
-				RA:      0,
-				Z:       0,
-				RCODE:   responseRcode,
-				QDCOUNT: uint16(len(receivedQuestions)),
-				ANCOUNT: uint16(len(answers)),
-				NSCOUNT: 0,
-				ARCOUNT: 0,
-			},
-			Questions: receivedQuestions,
-			Answers:   answers,
+		if resolverAddr != nil {
+			for _, req := range requestsToForward {
+				resp, err := forwardRequest(req, resolverAddr)
+				if err != nil {
+					fmt.Println("Failed to forward request:", err)
+					continue
+				}
+				records := ParseAnswers(resp)
+				answers = append(answers, DNSAnswer{Records: records})
+			}
+		} else {
+			for _, question := range receivedQuestions {
+				record := NewResourceRecord(question)
+				answers = append(answers, DNSAnswer{Records: []ResourceRecord{record}})
+			}
 		}
-		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
-		fmt.Printf("Response: %v", testResponse)
-		// Create an empty response
-		_, err = udpConn.WriteToUDP(testResponse.Serialize(), source)
+
+		testResponse := NewDNSRequest(DNSHeader{
+			ID:      receivedHeader.ID,
+			QR:      1,
+			OPCODE:  receivedHeader.OPCODE,
+			AA:      0,
+			TC:      0,
+			RD:      receivedHeader.RD,
+			RA:      0,
+			Z:       0,
+			RCODE:   responseRcode,
+			QDCOUNT: uint16(len(receivedQuestions)),
+			ANCOUNT: uint16(len(answers)),
+			NSCOUNT: 0,
+			ARCOUNT: 0,
+		}, receivedQuestions, answers)
+
+		response := testResponse.Serialize()
+		_, err = udpConn.WriteToUDP(response, source)
 		if err != nil {
 			fmt.Println("Failed to send response:", err)
 		}
