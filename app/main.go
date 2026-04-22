@@ -124,8 +124,8 @@ func (a *DNSAnswer) Serialize() []byte {
 
 type ResourceRecord struct {
 	Name  []DNSLabelSequence
-	Type  int16
-	Class int16
+	Type  uint16
+	Class uint16
 	TTL   int32
 	Data  []byte
 }
@@ -243,6 +243,14 @@ func ParseDNSRequest(buf []byte) (DNSHeader, []DNSQuestion) {
 	return header, questions
 }
 
+func NewResourceRecord(q DNSQuestion) ResourceRecord {
+	return ResourceRecord{
+		Name:  q.Name,
+		Type:  q.Type,
+		Class: q.Class,
+	}
+}
+
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
@@ -281,8 +289,8 @@ func main() {
 		for _, question := range receivedQuestions {
 			record := ResourceRecord{
 				Name:  question.Name,
-				Type:  1,
-				Class: 1,
+				Type:  question.Type,
+				Class: question.Class,
 				TTL:   60,
 				Data:  []byte{0x08, 0x08, 0x08, 0x08},
 			}
@@ -291,19 +299,7 @@ func main() {
 			}
 			answers = append(answers, answer)
 		}
-		records := []ResourceRecord{}
 
-		for _, question := range receivedQuestions {
-			record := ResourceRecord{
-				Name:  question.Name,
-				Type:  1,
-				Class: 1,
-				TTL:   60,
-				Data:  []byte{0x08, 0x08, 0x08, 0x08},
-			}
-
-			records = append(records, record)
-		}
 		testResponse := DNSResponse{
 			Header: DNSHeader{
 				ID:      receivedHeader.ID,
