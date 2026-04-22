@@ -180,7 +180,7 @@ func ParseDNSHeader(buf []byte) DNSHeader {
 func ParseDNSQuestions(buf []byte) []DNSQuestion {
 	questions := []DNSQuestion{}
 	// Header is 12 bytes fixed
-	for i := 12; i <= len(buf); {
+	for i := 12; i < len(buf); {
 		Name := []DNSLabelSequence{}
 		for buf[i] != 0x00 {
 			lenByte := buf[i]
