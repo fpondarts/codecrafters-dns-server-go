@@ -198,12 +198,12 @@ func ParseDNSQuestions(buf []byte) []DNSQuestion {
 				fmt.Printf("i: %d, i+%d = %d\n", i, nameLen, i+nameLen)
 				i += int(nameLen)
 			}
-			fmt.Printf("buf[%d]: %b, buf[%d] == 0x00: %b\n", i, buf[i], i, buf[i] == 0x00)
 		}
 
 		Type := binary.BigEndian.Uint16(buf[i : i+2])
 		i += 2
 		Class := binary.BigEndian.Uint16(buf[i : i+2])
+		i += 2
 
 		question := DNSQuestion{
 			Name,
