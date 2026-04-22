@@ -180,6 +180,7 @@ func ParseDNSHeader(buf []byte) DNSHeader {
 func GetNames(buf []byte, start int) ([]string, int) {
 	names := []string{}
 	i := start
+	fmt.Printf("Starting sequence at %d\n", i)
 	for buf[i] != 0 {
 		lenByte := buf[i]
 
