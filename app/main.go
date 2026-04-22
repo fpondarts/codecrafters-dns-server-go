@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"net"
 )
@@ -250,7 +251,7 @@ func main() {
 		}
 
 		receivedData := string(buf[:size])
-		fmt.Printf("Received: %s\n", receivedData)
+		fmt.Printf("Received: %s\n", hex.EncodeToString(buf[:size]))
 		receivedHeader, receivedQuestions := ParseDNSRequest([]byte(receivedData))
 		responseRcode := uint8(0)
 		if receivedHeader.OPCODE != 0 {
