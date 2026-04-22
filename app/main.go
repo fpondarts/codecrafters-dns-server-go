@@ -186,7 +186,7 @@ func ParseDNSQuestions(buf []byte) []DNSQuestion {
 			lenByte := buf[i]
 
 			if lenByte>>6 == 0x03 {
-				labelOffset := binary.BigEndian.Uint16([]byte{(buf[i] << 2) >> 2, buf[i+1]})
+				labelOffset := binary.BigEndian.Uint16([]byte{buf[i] & 0x3, buf[i+1]})
 				nameLen := uint8(buf[labelOffset])
 				Name = append(Name, DNSLabelSequence{Label: string(buf[labelOffset+1 : labelOffset+1+uint16(nameLen)])})
 				i += 2
