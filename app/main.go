@@ -19,7 +19,7 @@ func (r *DNSResponse) Serialize() []byte {
 	for _, question := range r.Questions {
 		buf = append(buf, question.Serialize()...)
 	}
-	buf = append(buf, answer.Serialize()...)
+	buf = append(buf, r.Answer.Serialize()...)
 	return buf
 }
 
