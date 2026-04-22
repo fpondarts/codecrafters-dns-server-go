@@ -202,7 +202,7 @@ func GetNames(buf []byte, start int) ([]string, int) {
 	}
 
 	fmt.Printf("Returning %v, ending at %d, with buf[%d] = %d \n", names, i, i, buf[i])
-	return names, i
+	return names, i + 1
 }
 
 func ParseDNSQuestions(buf []byte) []DNSQuestion {
@@ -217,7 +217,6 @@ func ParseDNSQuestions(buf []byte) []DNSQuestion {
 		}
 		fmt.Printf("Found name sequence: %v. Sequence ends at %d. BufLen is %d\n", names, end, len(buf))
 		i = end
-		i += 1
 		Type := binary.BigEndian.Uint16(buf[i : i+2])
 		i += 2
 		Class := binary.BigEndian.Uint16(buf[i : i+2])
