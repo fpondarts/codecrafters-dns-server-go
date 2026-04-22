@@ -191,7 +191,7 @@ func ParseDNSQuestions(buf []byte) []DNSQuestion {
 				Name = append(Name, DNSLabelSequence{Label: string(buf[labelOffset+1 : labelOffset+1+uint16(nameLen)])})
 				i += 2
 			} else {
-				fmt.Printf("i: %d, LenByte %b, bufLen: %d", i, lenByte, len(buf))
+				fmt.Printf("i: %d, LenByte %b, bufLen: %d\n", i, lenByte, len(buf))
 				nameLen := int(uint8(lenByte))
 				i += 1
 				Name = append(Name, DNSLabelSequence{Label: string(buf[i : i+nameLen])})
