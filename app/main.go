@@ -190,7 +190,7 @@ func GetNames(buf []byte, start int) ([]string, int) {
 			fmt.Printf("Going back to offset %d\n", offset)
 			compressedNames, _ := GetNames(buf, int(offset))
 			names = append(names, compressedNames...)
-			return names, i + 2
+			return names, i + 1
 		} else {
 			nameLen := int(lenByte)
 			i += 1
