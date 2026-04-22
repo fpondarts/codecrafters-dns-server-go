@@ -205,6 +205,7 @@ func ParseDNSQuestions(buf []byte) []DNSQuestion {
 	for i := 12; i < len(buf) && buf[i] != 0x00; {
 		Name := []DNSLabelSequence{}
 		names, end := GetNames(buf, i)
+		fmt.Printf("labels: %v", names)
 		for _, name := range names {
 			Name = append(Name, DNSLabelSequence{Label: name})
 		}
