@@ -249,6 +249,7 @@ func main() {
 		}
 
 		receivedData := string(buf[:size])
+		fmt.Printf("Received: %s\n", receivedData)
 		receivedHeader, receivedQuestions := ParseDNSRequest([]byte(receivedData))
 		responseRcode := uint8(0)
 		if receivedHeader.OPCODE != 0 {
