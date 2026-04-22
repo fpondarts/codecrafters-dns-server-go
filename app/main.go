@@ -183,8 +183,10 @@ func GetNames(buf []byte, start int) ([]string, int) {
 	for buf[i] != 0 {
 		lenByte := buf[i]
 
+		fmt.Printf("Looking at byte %d, with value %b\n", lenByte, buf[i])
 		if lenByte>>6 == 0x03 {
 			offset := binary.BigEndian.Uint16([]byte{buf[i] & 0x3f, buf[i+1]})
+			fmt.Printf("Going back to offset %d\n", offset)
 			compressedNames, _ := GetNames(buf, int(offset))
 			names = append(names, compressedNames...)
 			i += 2
@@ -194,8 +196,11 @@ func GetNames(buf []byte, start int) ([]string, int) {
 			name := string(buf[i : i+nameLen])
 			names = append(names, name)
 			i += nameLen
+			fmt.Printf("Found %s sequence starting at %d. Moving forward to %d", name, i-1-nameLen, i)
 		}
 	}
+
+	fmt.Printf("Returning %v, ending at %d, with buf[%d] = %b \n", names, i, i, buf[i])
 	return names, i
 }
 
@@ -209,6 +214,7 @@ func ParseDNSQuestions(buf []byte) []DNSQuestion {
 		for _, name := range names {
 			Name = append(Name, DNSLabelSequence{Label: name})
 		}
+		fmt.Printf("Found name sequence: %v. Sequence ends at %d. BufLen is %d\n", names, end, len(buf))
 		i = end
 		i += 1
 		Type := binary.BigEndian.Uint16(buf[i : i+2])
