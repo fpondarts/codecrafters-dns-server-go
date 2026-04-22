@@ -9,7 +9,7 @@ import (
 type DNSResponse struct {
 	Header    DNSHeader
 	Questions []DNSQuestion
-	Answer    DNSAnswer
+	Answers   []DNSAnswer
 }
 
 func (r *DNSResponse) Serialize() []byte {
@@ -19,7 +19,9 @@ func (r *DNSResponse) Serialize() []byte {
 	for _, question := range r.Questions {
 		buf = append(buf, question.Serialize()...)
 	}
-	buf = append(buf, r.Answer.Serialize()...)
+	for _, answer := range r.Answers {
+		buf = append(buf, answer.Serialize()...)
+	}
 	return buf
 }
 
@@ -274,6 +276,21 @@ func main() {
 			responseRcode = 4
 		}
 
+		answers := []DNSAnswer{}
+
+		for _, question := range receivedQuestions {
+			record := ResourceRecord{
+				Name:  question.Name,
+				Type:  1,
+				Class: 1,
+				TTL:   60,
+				Data:  []byte{0x08, 0x08, 0x08, 0x08},
+			}
+			answer := DNSAnswer{
+				Records: []ResourceRecord{record},
+			}
+			answers = append(answers, answer)
+		}
 		records := []ResourceRecord{}
 
 		for _, question := range receivedQuestions {
@@ -304,9 +321,7 @@ func main() {
 				ARCOUNT: 0,
 			},
 			Questions: receivedQuestions,
-			Answer: DNSAnswer{
-				Records: records,
-			},
+			Answers:   answers,
 		}
 		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
 
