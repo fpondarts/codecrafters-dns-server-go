@@ -196,7 +196,7 @@ func GetNames(buf []byte, start int) ([]string, int) {
 			name := string(buf[i : i+nameLen])
 			names = append(names, name)
 			i += nameLen
-			fmt.Printf("Found %s sequence starting at %d. Moving forward to %d", name, i-1-nameLen, i)
+			fmt.Printf("Found %s sequence starting at %d. Moving forward to %d\n", name, i-1-nameLen, i)
 		}
 	}
 
