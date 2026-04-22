@@ -177,29 +177,38 @@ func ParseDNSHeader(buf []byte) DNSHeader {
 	}
 }
 
+func GetNames(buf []byte, start int) ([]string, int) {
+	names := []string{}
+	i := start
+	for buf[i] != 0 {
+		lenByte := buf[i]
+
+		if lenByte>>6 == 0x03 {
+			offset := binary.BigEndian.Uint16([]byte{buf[i] & 0x3f, buf[i+1]})
+			compressedNames, _ := GetNames(buf, int(offset))
+			names = append(names, compressedNames...)
+			i += 2
+		} else {
+			nameLen := int(lenByte)
+			i += 1
+			name := string(buf[i : i+nameLen])
+			names = append(names, name)
+			i += nameLen
+		}
+	}
+	return names, i
+}
+
 func ParseDNSQuestions(buf []byte) []DNSQuestion {
 	questions := []DNSQuestion{}
 	// Header is 12 bytes fixed
 	for i := 12; i < len(buf) && buf[i] != 0x00; {
 		Name := []DNSLabelSequence{}
-		for buf[i] != 0x00 {
-			lenByte := buf[i]
-			if lenByte>>6 == 0x03 {
-				labelOffset := binary.BigEndian.Uint16([]byte{buf[i] & 0x3f, buf[i+1]})
-				for j := labelOffset; buf[j] != 0x00; {
-					nameLen := uint8(buf[labelOffset])
-					Name = append(Name, DNSLabelSequence{Label: string(buf[labelOffset+1 : labelOffset+1+uint16(nameLen)])})
-				}
-				i += 2
-			} else {
-				nameLen := int(uint8(lenByte))
-				fmt.Printf("i: %d, i+1 = %d\n", i, i+1)
-				i += 1
-				Name = append(Name, DNSLabelSequence{Label: string(buf[i : i+nameLen])})
-				fmt.Printf("i: %d, i+%d = %d\n", i, nameLen, i+nameLen)
-				i += int(nameLen)
-			}
+		names, end := GetNames(buf, i)
+		for _, name := range names {
+			Name = append(Name, DNSLabelSequence{Label: name})
 		}
+		i = end
 		i += 1
 		Type := binary.BigEndian.Uint16(buf[i : i+2])
 		i += 2
