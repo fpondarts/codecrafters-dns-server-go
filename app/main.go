@@ -184,7 +184,7 @@ func ParseDNSQuestions(buf []byte) []DNSQuestion {
 		Name := []DNSLabelSequence{}
 		for buf[i] != 0x00 {
 			lenByte := buf[i]
-			fmt.Printf("i: %d, LenByte %b, bufLen: %d\n", i, lenByte, len(buf))
+			fmt.Printf("i: %d, LenByte %b, Len: %d, bufLen: %d\n", i, lenByte, uint8(lenByte), len(buf))
 
 			if lenByte>>6 == 0x03 {
 				fmt.Println("Here")
