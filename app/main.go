@@ -198,6 +198,7 @@ func ParseDNSQuestions(buf []byte) []DNSQuestion {
 				fmt.Printf("i: %d, i+%d = %d\n", i, nameLen, i+nameLen)
 				i += int(nameLen)
 			}
+			fmt.Printf("buf[%d]: %b", i, buf[i])
 		}
 
 		Type := binary.BigEndian.Uint16(buf[i : i+2])
