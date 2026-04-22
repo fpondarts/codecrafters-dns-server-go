@@ -183,7 +183,7 @@ func GetNames(buf []byte, start int) ([]string, int) {
 	for buf[i] != 0 {
 		lenByte := buf[i]
 
-		fmt.Printf("Looking at byte %d, with value %b\n", lenByte, buf[i])
+		fmt.Printf("Looking at byte %d, with value %d\n", lenByte, buf[i])
 		if lenByte>>6 == 0x03 {
 			offset := binary.BigEndian.Uint16([]byte{buf[i] & 0x3f, buf[i+1]})
 			fmt.Printf("Going back to offset %d\n", offset)
@@ -200,7 +200,7 @@ func GetNames(buf []byte, start int) ([]string, int) {
 		}
 	}
 
-	fmt.Printf("Returning %v, ending at %d, with buf[%d] = %b \n", names, i, i, buf[i])
+	fmt.Printf("Returning %v, ending at %d, with buf[%d] = %d \n", names, i, i, buf[i])
 	return names, i
 }
 
