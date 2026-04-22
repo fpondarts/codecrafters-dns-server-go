@@ -188,15 +188,15 @@ func ParseDNSQuestions(buf []byte) []DNSQuestion {
 				labelOffset := binary.BigEndian.Uint16([]byte{buf[i] & 0x3f, buf[i+1]})
 				nameLen := uint8(buf[labelOffset])
 				Name = append(Name, DNSLabelSequence{Label: string(buf[labelOffset+1 : labelOffset+1+uint16(nameLen)])})
+				fmt.Printf("i: %d, i+2 = %d\n", i, i+2)
 				i += 2
-				fmt.Printf("i: %d, i+2 = %d", i, i+2)
 			} else {
 				nameLen := int(uint8(lenByte))
+				fmt.Printf("i: %d, i+i = %d\n", i, i+1)
 				i += 1
-				fmt.Printf("i: %d, i+i = %d", i, i+1)
 				Name = append(Name, DNSLabelSequence{Label: string(buf[i : i+nameLen])})
+				fmt.Printf("i: %d, i+%d = %d\n", i, nameLen, i+nameLen)
 				i += int(nameLen)
-				fmt.Printf("i: %d, i+%d = %d", i, nameLen, i+nameLen)
 			}
 		}
 
