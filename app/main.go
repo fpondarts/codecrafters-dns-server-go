@@ -7,17 +7,19 @@ import (
 )
 
 type DNSResponse struct {
-	Header   DNSHeader
-	Question DNSQuestion
-	Answer   DNSAnswer
+	Header    DNSHeader
+	Questions []DNSQuestion
+	Answer    DNSAnswer
 }
 
 func (r *DNSResponse) Serialize() []byte {
 	buf := []byte{}
 
 	buf = append(buf, r.Header.Serialize()...)
-	buf = append(buf, r.Question.Serialize()...)
-	buf = append(buf, r.Answer.Serialize()...)
+	for _, question := range r.Questions {
+		buf = append(buf, question.Serialize()...)
+	}
+	buf = append(buf, answer.Serialize()...)
 	return buf
 }
 
@@ -175,43 +177,48 @@ func ParseDNSHeader(buf []byte) DNSHeader {
 	}
 }
 
-func ParseDNSQuestion(buf []byte) DNSQuestion {
+func ParseDNSQuestions(buf []byte) []DNSQuestion {
+	questions := []DNSQuestion{}
 	// Header is 12 bytes fixed
-	var i uint = 12
+	for i := uint(12); i <= uint(len(buf)); {
+		Name := []DNSLabelSequence{}
+		for buf[i] != 0x00 {
+			lenByte := buf[i]
 
-	Name := []DNSLabelSequence{}
-	for buf[i] != 0x00 {
-		lenByte := buf[i]
-
-		if lenByte>>6 == 0x03 {
-			labelOffset := binary.BigEndian.Uint16([]byte{(buf[i] << 2) >> 2, buf[i+1]})
-			nameLen := uint8(buf[labelOffset])
-			Name = append(Name, DNSLabelSequence{Label: string(buf[labelOffset+1 : labelOffset+1+uint16(nameLen)])})
-			i += 2
-		} else {
-			nameLen := uint(lenByte)
-			i += 1
-			Name = append(Name, DNSLabelSequence{Label: string(buf[i : i+nameLen])})
-			i += nameLen
+			if lenByte>>6 == 0x03 {
+				labelOffset := binary.BigEndian.Uint16([]byte{(buf[i] << 2) >> 2, buf[i+1]})
+				nameLen := uint8(buf[labelOffset])
+				Name = append(Name, DNSLabelSequence{Label: string(buf[labelOffset+1 : labelOffset+1+uint16(nameLen)])})
+				i += 2
+			} else {
+				nameLen := uint(lenByte)
+				i += 1
+				Name = append(Name, DNSLabelSequence{Label: string(buf[i : i+nameLen])})
+				i += nameLen
+			}
 		}
+
+		Type := binary.BigEndian.Uint16(buf[i : i+2])
+		i += 2
+		Class := binary.BigEndian.Uint16(buf[i : i+2])
+
+		question := DNSQuestion{
+			Name,
+			Type,
+			Class,
+		}
+
+		questions = append(questions, question)
 	}
 
-	Type := binary.BigEndian.Uint16(buf[i : i+2])
-	i += 2
-	Class := binary.BigEndian.Uint16(buf[i : i+2])
-
-	return DNSQuestion{
-		Name,
-		Type,
-		Class,
-	}
+	return questions
 }
 
-func ParseDNSRequest(buf []byte) (DNSHeader, DNSQuestion) {
+func ParseDNSRequest(buf []byte) (DNSHeader, []DNSQuestion) {
 	header := ParseDNSHeader(buf)
-	question := ParseDNSQuestion(buf)
+	questions := ParseDNSQuestions(buf)
 
-	return header, question
+	return header, questions
 }
 
 func main() {
@@ -241,10 +248,24 @@ func main() {
 		}
 
 		receivedData := string(buf[:size])
-		receivedHeader, receivedQuestion := ParseDNSRequest([]byte(receivedData))
+		receivedHeader, receivedQuestions := ParseDNSRequest([]byte(receivedData))
 		responseRcode := uint8(0)
 		if receivedHeader.OPCODE != 0 {
 			responseRcode = 4
+		}
+
+		records := []ResourceRecord{}
+
+		for _, question := range receivedQuestions {
+			record := ResourceRecord{
+				Name:  question.Name,
+				Type:  1,
+				Class: 1,
+				TTL:   60,
+				Data:  []byte{0x08, 0x08, 0x08, 0x08},
+			}
+
+			records = append(records, record)
 		}
 		testResponse := DNSResponse{
 			Header: DNSHeader{
@@ -262,21 +283,9 @@ func main() {
 				NSCOUNT: 0,
 				ARCOUNT: 0,
 			},
-			Question: DNSQuestion{
-				Name:  receivedQuestion.Name,
-				Type:  1,
-				Class: 1,
-			},
+			Questions: receivedQuestions,
 			Answer: DNSAnswer{
-				Records: []ResourceRecord{
-					{
-						Name:  receivedQuestion.Name,
-						Type:  1,
-						Class: 1,
-						TTL:   60,
-						Data:  []byte{0x08, 0x08, 0x08, 0x08},
-					},
-				},
+				Records: records,
 			},
 		}
 		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
